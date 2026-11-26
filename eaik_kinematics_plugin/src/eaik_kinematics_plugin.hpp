@@ -17,7 +17,7 @@
 #include <moveit/robot_model/joint_model.h>
 #endif
 
-#include <eaik_kinematics_parameters.hpp>
+#include <eaik_kinematics_plugin/eaik_kinematics_parameters.hpp>
 
 namespace eaik_kinematics_plugin
 {
