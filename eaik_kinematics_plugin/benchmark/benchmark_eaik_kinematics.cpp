@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <random>
 #include <string>
@@ -171,5 +172,8 @@ int main(int argc, char** argv)
   }
 
   rclcpp::shutdown();
-  return 0;
+  // MoveIt's logger keeps a static node. Its destructor at exit calls rmw_zenoh after zenoh has shut down,
+  // which aborts the process. Skip the static destructors.
+  std::fflush(stdout);
+  std::quick_exit(0);
 }

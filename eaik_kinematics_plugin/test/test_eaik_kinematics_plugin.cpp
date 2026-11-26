@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <random>
 #include <string>
@@ -360,5 +362,8 @@ int main(int argc, char** argv)
   rclcpp::init(argc, argv);
   const int result = RUN_ALL_TESTS();
   rclcpp::shutdown();
-  return result;
+  // MoveIt's logger keeps a static node. Its destructor at exit calls rmw_zenoh after zenoh has shut down,
+  // which aborts the process. Skip the static destructors.
+  std::fflush(stdout);
+  std::quick_exit(result);
 }
