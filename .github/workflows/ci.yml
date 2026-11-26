@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [humble, jazzy, lyrical, rolling]
+    runs-on: ubuntu-latest
+    container: ros:${{ matrix.distro }}-ros-base
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src/eaik_kinematics_plugin
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          rosdep update --rosdistro ${{ matrix.distro }}
+          rosdep install --from-paths src --ignore-src -y
+
+      # EAIK itself does not build cleanly with -Werror, so it is built on its own first.
+      - name: Build eaik_vendor
+        run: |
+          source /opt/ros/${{ matrix.distro }}/setup.bash
+          colcon build --packages-select eaik_vendor
+
+      - name: Build eaik_kinematics_plugin with warnings as errors
+        run: |
+          source /opt/ros/${{ matrix.distro }}/setup.bash
+          colcon build --packages-select eaik_kinematics_plugin --cmake-args -DCMAKE_CXX_FLAGS=-Werror
+
+      - name: Test
+        run: |
+          source /opt/ros/${{ matrix.distro }}/setup.bash
+          colcon test --packages-select eaik_kinematics_plugin --event-handlers console_direct+
+          colcon test-result --verbose
