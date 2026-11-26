@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>eaik_vendor</name>
+  <version>0.1.0</version>
+  <description>Vendor package for the EAIK analytical inverse kinematics library.</description>
+  <maintainer email="mail@saifsidhik.page">Saif Sidhik</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <url type="website">https://github.com/OstermD/EAIK</url>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_vendor_package</buildtool_depend>
+  <buildtool_depend>git</buildtool_depend>
+
+  <depend>eigen</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

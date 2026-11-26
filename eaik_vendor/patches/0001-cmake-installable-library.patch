@@ -1,0 +1,126 @@
+diff --git a/CPP/Tests/CMakeLists.txt b/CPP/Tests/CMakeLists.txt
+index f17aca9..f9fabb2 100644
+--- a/CPP/Tests/CMakeLists.txt
++++ b/CPP/Tests/CMakeLists.txt
+@@ -13,9 +13,9 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+ 
+ find_package (Eigen3 REQUIRED)
+ 
+-add_executable(Unit_Tests IK_unit_tests.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/kinematic_remodeling.cpp ${CMAKE_CURRENT_SOURCE_DIR}/Utils/IK_test_utils.cpp)
++add_executable(Unit_Tests IK_unit_tests.cpp ${CMAKE_CURRENT_SOURCE_DIR}/Utils/IK_test_utils.cpp)
+ target_include_directories(Unit_Tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src ${CMAKE_CURRENT_SOURCE_DIR}/../src/IK ${CMAKE_CURRENT_SOURCE_DIR}/../src/IK/utils ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils ${CMAKE_CURRENT_SOURCE_DIR}/Utils)
+-target_link_libraries(Unit_Tests EAIK_Kinematics EAIK)
++target_link_libraries(Unit_Tests EAIK)
+ target_link_libraries(Unit_Tests Eigen3::Eigen)
+ 
+ 
+diff --git a/CPP/src/CMakeLists.txt b/CPP/src/CMakeLists.txt
+index f9053ba..7a4b40b 100644
+--- a/CPP/src/CMakeLists.txt
++++ b/CPP/src/CMakeLists.txt
+@@ -1,16 +1,58 @@
+-cmake_minimum_required(VERSION 3.9)
+-project(EAIK_Cpp)
++cmake_minimum_required(VERSION 3.14)
++project(EAIK VERSION 1.2.2 LANGUAGES CXX)
+ 
+-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/IK build_IK)
+-
+-if(NOT CMAKE_BUILD_TYPE)
++if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+     set(CMAKE_BUILD_TYPE Release)
+ endif()
+-set(CMAKE_CXX_STANDARD 17)
+-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+ 
+-set(sources EAIK.cpp ${CMAKE_CURRENT_SOURCE_DIR}/utils/kinematic_remodeling.cpp ${CMAKE_CURRENT_SOURCE_DIR}/IK/utils/kinematic_utils.cpp)
++find_package(Eigen3 3.3 REQUIRED NO_MODULE)
++
++include(GNUInstallDirs)
++include(CMakePackageConfigHelpers)
++
++set(IK_GEO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../external/ik-geo/cpp/subproblems)
++
++add_library(EAIK
++    EAIK.cpp
++    utils/kinematic_remodeling.cpp
++    IK/utils/kinematic_utils.cpp
++    IK/1R_IK.cpp
++    IK/2R_IK.cpp
++    IK/3R_IK.cpp
++    IK/4R_IK.cpp
++    IK/5R_IK.cpp
++    IK/6R_IK.cpp
++    ${IK_GEO_DIR}/sp.cpp
++)
++add_library(EAIK::EAIK ALIAS EAIK)
++target_compile_features(EAIK PUBLIC cxx_std_17)
++set_target_properties(EAIK PROPERTIES POSITION_INDEPENDENT_CODE ON)
++target_include_directories(EAIK PUBLIC
++    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
++    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/IK>
++    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/IK/utils>
++    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils>
++    $<BUILD_INTERFACE:${IK_GEO_DIR}>
++    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/eaik>
++)
++target_link_libraries(EAIK PUBLIC Eigen3::Eigen)
++
++install(TARGETS EAIK EXPORT EAIKTargets
++    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
++    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
++    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
++)
++install(FILES EAIK.h IK/IKS.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/eaik)
++install(EXPORT EAIKTargets NAMESPACE EAIK:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/EAIK)
+ 
+-add_library(EAIK ${sources})
+-target_include_directories(EAIK PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/utils ${CMAKE_CURRENT_SOURCE_DIR}/IK ${CMAKE_CURRENT_SOURCE_DIR}/IK/utils)
+-target_link_libraries(EAIK EAIK_Kinematics)
++configure_package_config_file(EAIKConfig.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/EAIKConfig.cmake
++    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/EAIK
++)
++write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/EAIKConfigVersion.cmake
++    COMPATIBILITY SameMajorVersion
++)
++install(FILES
++    ${CMAKE_CURRENT_BINARY_DIR}/EAIKConfig.cmake
++    ${CMAKE_CURRENT_BINARY_DIR}/EAIKConfigVersion.cmake
++    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/EAIK
++)
+diff --git a/CPP/src/EAIKConfig.cmake.in b/CPP/src/EAIKConfig.cmake.in
+new file mode 100644
+index 0000000..ac48d6c
+--- /dev/null
++++ b/CPP/src/EAIKConfig.cmake.in
+@@ -0,0 +1,7 @@
++@PACKAGE_INIT@
++
++include(CMakeFindDependencyMacro)
++find_dependency(Eigen3 3.3 NO_MODULE)
++
++include("${CMAKE_CURRENT_LIST_DIR}/EAIKTargets.cmake")
++check_required_components(EAIK)
+diff --git a/CPP/src/IK/CMakeLists.txt b/CPP/src/IK/CMakeLists.txt
+deleted file mode 100644
+index 750c639..0000000
+--- a/CPP/src/IK/CMakeLists.txt
++++ /dev/null
+@@ -1,16 +0,0 @@
+-cmake_minimum_required(VERSION 3.9)
+-project(EAIK_Kin)
+-
+-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../external/ik-geo/cpp/subproblems build_sp)
+-
+-if(NOT CMAKE_BUILD_TYPE)
+-    set(CMAKE_BUILD_TYPE Release)
+-endif()
+-set(CMAKE_CXX_STANDARD 17)
+-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+-
+-set(sources 6R_IK.cpp 5R_IK.cpp 4R_IK.cpp 3R_IK.cpp 2R_IK.cpp 1R_IK.cpp ${CMAKE_CURRENT_SOURCE_DIR}/utils/kinematic_utils.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../utils/kinematic_remodeling.cpp)
+-
+-add_library(EAIK_Kinematics ${sources})
+-target_include_directories(EAIK_Kinematics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../utils ${CMAKE_CURRENT_SOURCE_DIR}/../../external/ik-geo/cpp/subproblems)
+-target_link_libraries(EAIK_Kinematics SUBPROBLEMS)
+\ No newline at end of file
