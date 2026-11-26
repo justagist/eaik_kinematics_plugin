@@ -1,0 +1,18 @@
+eaik_kinematics:
+  position_tolerance: {
+    type: double,
+    default_value: 0.00001,
+    description: "Maximum position error in metres of an IK solution, checked with forward kinematics",
+    validation: {
+      gt<>: [ 0.0 ]
+    }
+  }
+
+  orientation_tolerance: {
+    type: double,
+    default_value: 0.00001,
+    description: "Maximum orientation error in radians of an IK solution, checked with forward kinematics",
+    validation: {
+      gt<>: [ 0.0 ]
+    }
+  }

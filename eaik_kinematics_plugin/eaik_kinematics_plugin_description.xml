@@ -1,0 +1,6 @@
+<library path="eaik_kinematics_plugin">
+  <class name="eaik_kinematics_plugin/EAIKKinematicsPlugin" type="eaik_kinematics_plugin::EAIKKinematicsPlugin"
+         base_class_type="kinematics::KinematicsBase">
+    <description>Closed-form inverse kinematics for 6R chains with EAIK.</description>
+  </class>
+</library>
