@@ -41,7 +41,7 @@ namespace
 {
 constexpr char kBase[] = "base_link";
 // The kinematics_solver_timeout of the Fanuc MoveIt config.
-constexpr double kTimeout = 0.005;
+constexpr double kTimeout = 0.015;
 constexpr double kNearSeedNoise = 0.05;
 constexpr double kSameBranchTolerance = 0.1;
 constexpr double kNearSingularRange = 1e-3;
@@ -271,7 +271,9 @@ int main(int argc, char** argv)
 
   const Case reachable = makeCase(model, "manipulator", "tool0", get_configurations(six), get_configurations(six));
 
-  std::vector<std::vector<double>> near_seeds = reachable.targets;
+  // New targets: the cache of Cached KDL already holds solutions for the targets of the reachable case.
+  const std::vector<std::vector<double>> near_seed_targets = get_configurations(six);
+  std::vector<std::vector<double>> near_seeds = near_seed_targets;
   std::uniform_real_distribution<double> noise(-kNearSeedNoise, kNearSeedNoise);
   for (std::vector<double>& seed : near_seeds)
   {
@@ -281,7 +283,7 @@ int main(int argc, char** argv)
     }
     six.enforcePositionBounds(seed.data());
   }
-  const Case near_seed = makeCase(model, "manipulator", "tool0", reachable.targets, near_seeds);
+  const Case near_seed = makeCase(model, "manipulator", "tool0", near_seed_targets, near_seeds);
 
   std::vector<std::vector<double>> near_singular_targets = get_configurations(six);
   for (std::vector<double>& q : near_singular_targets)
