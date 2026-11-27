@@ -8,6 +8,7 @@
   <license>BSD-3-Clause</license>
 
   <url type="website">https://github.com/OstermD/EAIK</url>
+  <url type="repository">https://github.com/justagist/EAIK</url>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>ament_cmake_vendor_package</buildtool_depend>

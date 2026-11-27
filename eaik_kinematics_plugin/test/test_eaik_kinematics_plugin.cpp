@@ -35,18 +35,34 @@
 namespace
 {
 constexpr char kPluginName[] = "eaik_kinematics_plugin/EAIKKinematicsPlugin";
-constexpr double kPoseTolerance = 1e-5;
+// Far below the tolerance of the plugin (1e-5), so that a loss of accuracy fails the tests.
+constexpr double kPoseTolerance = 1e-9;
+// At a singular pose, the solution is only as accurate as the square root of the machine precision.
+constexpr double kSingularPoseTolerance = 1e-6;
 constexpr double kJointTolerance = 1e-6;
 constexpr int kNumSamples = 1000;
-// A 5-joint group of the Fanuc arm: the 6-joint arm without its last joint.
-constexpr char kFiveJointSrdf[] = R"(<?xml version="1.0"?>
+// Groups of the Fanuc arm with fewer than 6 joints: the arm without its last joint, and its first joint only.
+constexpr char kSubGroupsSrdf[] = R"(<?xml version="1.0"?>
 <robot name="fanuc">
   <group name="five_joints">
     <chain base_link="base_link" tip_link="link_5"/>
   </group>
+  <group name="one_joint">
+    <chain base_link="base_link" tip_link="link_1"/>
+  </group>
 </robot>)";
 
 using moveit_msgs::msg::MoveItErrorCodes;
+
+/// @brief Makes a joint origin without rotation in the x-z plane of the parent link.
+geometry_msgs::msg::Pose getOrigin(double x, double z)
+{
+  geometry_msgs::msg::Pose pose;
+  pose.position.x = x;
+  pose.position.z = z;
+  pose.orientation.w = 1.0;
+  return pose;
+}
 
 /// @brief Creates a solver from the plugin and initialises it.
 /// @param loader Loader that must outlive the solver.
@@ -108,13 +124,14 @@ protected:
   }
 
   /// @brief Checks that the solution reaches the target and obeys the joint limits.
-  void expectReaches(const std::vector<double>& solution, const Eigen::Isometry3d& target) const
+  void expectReaches(const std::vector<double>& solution, const Eigen::Isometry3d& target,
+                     double tolerance = kPoseTolerance) const
   {
     ASSERT_EQ(solution.size(), jmg_->getActiveJointModels().size());
     EXPECT_TRUE(jmg_->satisfiesPositionBounds(solution.data()));
     const Eigen::Isometry3d reached = getTipTransform(solution);
-    EXPECT_LT((reached.translation() - target.translation()).norm(), kPoseTolerance);
-    EXPECT_LT(Eigen::AngleAxisd(reached.linear().transpose() * target.linear()).angle(), kPoseTolerance);
+    EXPECT_LT((reached.translation() - target.translation()).norm(), tolerance);
+    EXPECT_LT(Eigen::AngleAxisd(reached.linear().transpose() * target.linear()).angle(), tolerance);
   }
 
   /// @brief Checks whether two configurations are equal joint by joint.
@@ -184,7 +201,7 @@ TEST_F(EAIKFanucTest, SolvesPosesAtTheWristSingularity)
     std::vector<double> solution;
     MoveItErrorCodes error_code;
     ASSERT_TRUE(solver_->getPositionIK(tf2::toMsg(target), getRandomConfiguration(), solution, error_code));
-    expectReaches(solution, target);
+    expectReaches(solution, target, kSingularPoseTolerance);
   }
 }
 
@@ -320,7 +337,7 @@ protected:
   {
     const urdf::ModelInterfaceSharedPtr urdf = moveit::core::loadModelInterface("fanuc");
     const auto srdf = std::make_shared<srdf::Model>();
-    ASSERT_TRUE(srdf->initString(*urdf, kFiveJointSrdf));
+    ASSERT_TRUE(srdf->initString(*urdf, kSubGroupsSrdf));
     robot_model_ = std::make_shared<moveit::core::RobotModel>(urdf, srdf);
     initialiseSolver("five_joints", "link_5");
   }
@@ -382,24 +399,85 @@ TEST(EAIKInitialiseTest, RejectsReversedChainWithoutDecomposition)
 {
   // EAIK finds a known decomposition for this arm only after it reverses the chain, but the reversed
   // chain has none. Joints 2 and 3 have the same axis.
-  const auto get_origin = [](double x, double z) {
-    geometry_msgs::msg::Pose pose;
-    pose.position.x = x;
-    pose.position.z = z;
-    pose.orientation.w = 1.0;
-    return pose;
-  };
   const urdf::Vector3 x_axis(1.0, 0.0, 0.0);
   const urdf::Vector3 y_axis(0.0, 1.0, 0.0);
   const urdf::Vector3 z_axis(0.0, 0.0, 1.0);
   moveit::core::RobotModelBuilder builder("reversed_without_decomposition", "base");
-  builder.addChain("base->link_1", "revolute", { get_origin(0.3, 0.0) }, x_axis);
-  builder.addChain("link_1->link_2", "revolute", { get_origin(0.0, 0.0) }, z_axis);
-  builder.addChain("link_2->link_3", "revolute", { get_origin(0.0, 0.0) }, z_axis);
-  builder.addChain("link_3->link_4", "revolute", { get_origin(0.0, 0.0) }, x_axis);
-  builder.addChain("link_4->link_5", "revolute", { get_origin(0.0, 0.3) }, x_axis);
-  builder.addChain("link_5->link_6", "revolute", { get_origin(0.3, 0.3) }, y_axis);
-  builder.addChain("link_6->tip", "fixed", { get_origin(0.3, 0.0) });
+  builder.addChain("base->link_1", "revolute", { getOrigin(0.3, 0.0) }, x_axis);
+  builder.addChain("link_1->link_2", "revolute", { getOrigin(0.0, 0.0) }, z_axis);
+  builder.addChain("link_2->link_3", "revolute", { getOrigin(0.0, 0.0) }, z_axis);
+  builder.addChain("link_3->link_4", "revolute", { getOrigin(0.0, 0.0) }, x_axis);
+  builder.addChain("link_4->link_5", "revolute", { getOrigin(0.0, 0.3) }, x_axis);
+  builder.addChain("link_5->link_6", "revolute", { getOrigin(0.3, 0.3) }, y_axis);
+  builder.addChain("link_6->tip", "fixed", { getOrigin(0.3, 0.0) });
+  builder.addGroupChain("base", "tip", "arm");
+  ASSERT_TRUE(builder.isValid());
+
+  pluginlib::ClassLoader<kinematics::KinematicsBase> loader("moveit_core", "kinematics::KinematicsBase");
+  EXPECT_FALSE(createSolver(loader, *builder.build(), "arm", "base", { "tip" }).second);
+}
+
+TEST(EAIKInitialiseTest, FailedReinitialisationClearsTheGroup)
+{
+  pluginlib::ClassLoader<kinematics::KinematicsBase> loader("moveit_core", "kinematics::KinematicsBase");
+  const moveit::core::RobotModelPtr fanuc = moveit::core::loadTestingRobotModel("fanuc");
+  const auto [solver, initialised] = createSolver(loader, *fanuc, "manipulator", "base_link", { "tool0" });
+  ASSERT_TRUE(initialised);
+  ASSERT_FALSE(solver->getJointNames().empty());
+
+  const auto node = std::make_shared<rclcpp::Node>("eaik_kinematics_plugin_test");
+  EXPECT_FALSE(solver->initialize(node, *fanuc, "manipulator", "base_link", { "tool0", "link_5" }, 0.1));
+  EXPECT_TRUE(solver->getJointNames().empty());
+  EXPECT_TRUE(solver->getLinkNames().empty());
+  std::vector<double> solution;
+  MoveItErrorCodes error_code;
+  EXPECT_FALSE(solver->getPositionIK(geometry_msgs::msg::Pose(), std::vector<double>(6, 0.0), solution, error_code));
+}
+
+TEST(EAIKInitialiseTest, RejectsArmWithAxesThatAreNotExactlyParallel)
+{
+  // A spherical-wrist arm with parallel axes 2 and 3. A URDF angle that is rounded to 1.5708 tilts axis 3
+  // by 3.7e-6 rad in the plane of the two axes, so they intersect far away. EAIK then selects a kinematic
+  // family that does not solve the arm.
+  const auto initialise = [](double tilt) {
+    moveit::core::RobotModelBuilder builder("spherical_wrist_arm", "base");
+    builder.addChain("base->link_1", "revolute", { getOrigin(0.0, 0.0) }, urdf::Vector3(0.0, 0.0, 1.0));
+    builder.addChain("link_1->link_2", "revolute", { getOrigin(0.32, 0.78) }, urdf::Vector3(0.0, 1.0, 0.0));
+    builder.addChain("link_2->link_3", "revolute", { getOrigin(0.0, 1.075) },
+                     urdf::Vector3(0.0, std::cos(tilt), std::sin(tilt)));
+    builder.addChain("link_3->link_4", "revolute", { getOrigin(1.1425, 0.2) }, urdf::Vector3(1.0, 0.0, 0.0));
+    builder.addChain("link_4->link_5", "revolute", { getOrigin(0.0, 0.0) }, urdf::Vector3(0.0, 1.0, 0.0));
+    builder.addChain("link_5->link_6", "revolute", { getOrigin(0.0, 0.0) }, urdf::Vector3(1.0, 0.0, 0.0));
+    builder.addChain("link_6->tip", "fixed", { getOrigin(0.2, 0.0) });
+    builder.addGroupChain("base", "tip", "arm");
+    pluginlib::ClassLoader<kinematics::KinematicsBase> loader("moveit_core", "kinematics::KinematicsBase");
+    return createSolver(loader, *builder.build(), "arm", "base", { "tip" }).second;
+  };
+  EXPECT_TRUE(initialise(0.0));
+  EXPECT_FALSE(initialise(3.7e-6));
+}
+
+TEST(EAIKInitialiseTest, RejectsSingleJointWithTipOnItsAxis)
+{
+  // The origin of link_1 is on the axis of joint_1, so its position does not give the joint angle, and
+  // EAIK solves a single joint from the tip position only.
+  const urdf::ModelInterfaceSharedPtr urdf = moveit::core::loadModelInterface("fanuc");
+  const auto srdf = std::make_shared<srdf::Model>();
+  ASSERT_TRUE(srdf->initString(*urdf, kSubGroupsSrdf));
+  const moveit::core::RobotModel fanuc(urdf, srdf);
+  pluginlib::ClassLoader<kinematics::KinematicsBase> loader("moveit_core", "kinematics::KinematicsBase");
+  EXPECT_FALSE(createSolver(loader, fanuc, "one_joint", "base_link", { "link_1" }).second);
+}
+
+TEST(EAIKInitialiseTest, RejectsFourJointChainWithParallelAxes)
+{
+  // EAIK overflows the stack on this chain, so the plugin must reject it before it calls EAIK.
+  const urdf::Vector3 z_axis(0.0, 0.0, 1.0);
+  moveit::core::RobotModelBuilder builder("planar_arm", "base");
+  builder.addChain("base->link_1", "revolute", { getOrigin(0.0, 0.0) }, z_axis);
+  builder.addChain("link_1->link_2->link_3->link_4", "revolute",
+                   { getOrigin(0.3, 0.0), getOrigin(0.3, 0.0), getOrigin(0.3, 0.0) }, z_axis);
+  builder.addChain("link_4->tip", "fixed", { getOrigin(0.3, 0.0) });
   builder.addGroupChain("base", "tip", "arm");
   ASSERT_TRUE(builder.isValid());
 
