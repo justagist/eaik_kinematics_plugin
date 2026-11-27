@@ -25,9 +25,23 @@ The plugin accepts a group if all of these conditions are true:
 - EAIK knows a closed-form decomposition for the arm, for example a spherical wrist, or three
   parallel or intersecting axes. The
   [EAIK README](https://github.com/OstermD/EAIK) lists the supported kinematic families.
+- EAIK solves the group. EAIK accepts some groups that it cannot solve, so `initialize()` does a
+  check: it samples 100 configurations, and EAIK must get each one back from its pose.
 
 If one condition is false, `initialize()` fails and logs the reason. Use a different solver for
 that group, for example KDL.
+
+The check rejects these groups:
+
+- An arm whose URDF has rounded values. EAIK finds parallel and intersecting axes with tolerances
+  near 1e-12. An angle of `1.5708` in place of pi/2 tilts an axis by 3.7e-6 rad, and EAIK then
+  selects a kinematic family that does not solve the arm. Give exact values in the URDF, for
+  example `${pi/2}` in xacro.
+- A group of 1 or 2 joints whose tip frame is on the axis of the last joint. EAIK solves these
+  groups from the tip position only.
+- Some groups of 4 joints, for example the first 4 joints of a UR-type arm.
+
+A group of 4 or more joints with all axes parallel is redundant, and is also rejected.
 
 A group with fewer than 6 joints cannot reach all positions and orientations. The plugin gives a
 solution only if the arm can reach the pose exactly (within the tolerances). Thus most pose goals
@@ -64,9 +78,13 @@ The parameters are in `robot_description_kinematics.<group>`.
   not iterate.
 - EAIK also returns least-squares solutions for poses that are out of reach. The plugin keeps only
   the solutions whose forward kinematics are within the tolerances.
+- At a singular configuration, the solutions are a continuous set and EAIK returns one of them.
+  For example, with joint 5 of a spherical-wrist arm at 0, only the sum of joints 4 and 6 is
+  fixed, and EAIK sets joint 4 to 0. The solution can then be far from the seed in these two
+  joints, and a search with consistency limits can fail. A Cartesian path that stays at such a
+  configuration can thus stop or jump.
 - `getPositionFK()` uses the EAIK model, and supports the tip frame only. This model is the one that
-  the IK solves, so FK and IK agree. It also does not allocate memory, and is safe for concurrent
-  calls.
+  the IK solves, so FK and IK agree.
 - `return_approximate_solution` is not used.
 - The const methods are safe for concurrent calls: they only read the data that `initialize()`
   writes, and EAIK keeps no mutable state.
@@ -107,8 +125,10 @@ colcon test-result --verbose
 
 The tests use the Fanuc and Panda arms from `moveit_resources`. They check IK against MoveIt's
 forward kinematics for random configurations, configurations at the wrist singularity, the
-solution order, the 2 pi variants, the solution callback, consistency limits, unreachable poses, a
-5-joint group, and that a 7-joint group and several tip frames are rejected.
+solution order, the 2 pi variants, the solution callback, consistency limits, unreachable poses and a
+5-joint group. They also check that `initialize()` rejects a 7-joint group, several tip frames, a
+reversed chain without a decomposition, an arm with axes that are not exactly parallel, a single
+joint with the tip on its axis, and a 4-joint chain with parallel axes.
 
 ## Benchmark
 

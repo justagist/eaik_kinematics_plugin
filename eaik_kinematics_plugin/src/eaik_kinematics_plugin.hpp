@@ -37,7 +37,7 @@ public:
   /// @param base_frame Frame in which IK poses are given.
   /// @param tip_frames Tip frames; exactly one is supported.
   /// @param search_discretization Not used, because a group of up to 6 joints has no redundant joints.
-  /// @return True if the group is a chain of 1 to 6 revolute joints with a known EAIK decomposition.
+  /// @return True if the group is a chain of 1 to 6 revolute joints that EAIK solves in closed form.
   bool initialize(const rclcpp::Node::SharedPtr& node, const moveit::core::RobotModel& robot_model,
                   const std::string& group_name, const std::string& base_frame,
                   const std::vector<std::string>& tip_frames, double search_discretization) override;
@@ -131,6 +131,12 @@ private:
   std::vector<std::vector<double>> computeSolutions(const geometry_msgs::msg::Pose& ik_pose,
                                                     const std::vector<double>& ik_seed_state,
                                                     const std::vector<double>& consistency_limits) const;
+
+  /// @brief Checks that EAIK reproduces sampled configurations from the poses of its own forward kinematics.
+  ///
+  /// EAIK accepts some groups that it then cannot solve, for example an arm with rounded URDF angles.
+  /// @return True if each sampled configuration is the solution nearest to itself.
+  bool solvesOwnForwardKinematics() const;
 
   /// @brief Adds every value of a joint that is equal modulo 2 pi and within its limits.
   /// @param joint Joint model that holds the limits.

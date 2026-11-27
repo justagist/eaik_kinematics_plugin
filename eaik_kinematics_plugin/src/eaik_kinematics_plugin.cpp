@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <random>
 #include <utility>
 
 #if __has_include(<moveit/robot_model/robot_model.hpp>)
@@ -24,10 +25,32 @@ namespace
 /// Margin by which an EAIK joint value may exceed a limit before it is clamped to the limit.
 constexpr double kLimitMargin = 1e-9;
 constexpr std::size_t kMaxJoints = 6;
+/// Largest norm of the cross product of two unit axes that are considered parallel.
+constexpr double kParallelAxesTolerance = 1e-9;
+constexpr int kSelfTestSamples = 100;
+/// Largest joint distance between a sampled configuration and the solution that must reproduce it.
+constexpr double kSelfTestJointTolerance = 1e-6;
+constexpr int kSolveFailureLogPeriodMs = 1000;
 
 rclcpp::Logger getLogger()
 {
   return rclcpp::get_logger("eaik_kinematics_plugin");
+}
+
+/// @brief Checks whether all joint axes are parallel.
+/// @param axes Unit joint axes, one for each column.
+/// @return True if each axis is parallel to the first axis.
+bool areAxesParallel(const Eigen::MatrixXd& axes)
+{
+  const Eigen::Vector3d first = axes.col(0);
+  for (Eigen::Index i = 1; i < axes.cols(); ++i)
+  {
+    if (first.cross(Eigen::Vector3d(axes.col(i))).norm() > kParallelAxesTolerance)
+    {
+      return false;
+    }
+  }
+  return true;
 }
 
 /// @brief Converts a pose message to a homogeneous transform.
@@ -64,6 +87,7 @@ bool EAIKKinematicsPlugin::initialize(const rclcpp::Node::SharedPtr& node, const
                                       const std::string& group_name, const std::string& base_frame,
                                       const std::vector<std::string>& tip_frames, double search_discretization)
 {
+  robot_.reset();
   if (tip_frames.size() != 1)
   {
     RCLCPP_ERROR(getLogger(), "Group '%s': EAIK supports exactly one tip frame, but %zu were given", group_name.c_str(),
@@ -137,6 +161,17 @@ bool EAIKKinematicsPlugin::initialize(const rclcpp::Node::SharedPtr& node, const
   p.col(joints_.size()) = tip_frame.translation() - previous_origin;
   const Eigen::Matrix3d tip_rotation = tip_frame.linear();
 
+  // A chain of 4 or more parallel axes moves in a plane and is redundant. EAIK does not reject it: with
+  // 4 joints it recurses until the stack overflows, which no exception handler can catch.
+  if (joints_.size() >= 4 && areAxesParallel(h))
+  {
+    RCLCPP_ERROR(getLogger(),
+                 "Group '%s': all joint axes are parallel, so the group is redundant. "
+                 "Use a different kinematics solver for this group.",
+                 group_name.c_str());
+    return false;
+  }
+
   try
   {
     robot_ = std::make_unique<EAIK::Robot>(h, p, tip_rotation);
@@ -154,6 +189,17 @@ bool EAIKKinematicsPlugin::initialize(const rclcpp::Node::SharedPtr& node, const
                  "Group '%s': EAIK knows no closed-form decomposition for this kinematic structure. "
                  "Use a different kinematics solver for this group.",
                  group_name.c_str());
+    robot_.reset();
+    return false;
+  }
+  if (!solvesOwnForwardKinematics())
+  {
+    RCLCPP_ERROR(getLogger(),
+                 "Group '%s': EAIK (kinematic family '%s') does not solve the poses of its own forward kinematics. "
+                 "Possible causes: joint axes or origins in the URDF that are rounded (EAIK needs them exact to "
+                 "about 1e-12), or a group that EAIK does not solve, for example 1 or 2 joints with the tip on the "
+                 "last joint axis. Use a different kinematics solver for this group.",
+                 group_name.c_str(), robot_->get_kinematic_family().c_str());
     robot_.reset();
     return false;
   }
@@ -332,7 +378,8 @@ EAIKKinematicsPlugin::computeSolutions(const geometry_msgs::msg::Pose& ik_pose,
   }
   catch (const std::exception& e)
   {
-    RCLCPP_DEBUG(getLogger(), "EAIK failed to solve: %s", e.what());
+    static rclcpp::Clock clock(RCL_STEADY_TIME);
+    RCLCPP_WARN_THROTTLE(getLogger(), clock, kSolveFailureLogPeriodMs, "EAIK failed to solve: %s", e.what());
     return {};
   }
 
@@ -399,6 +446,43 @@ EAIKKinematicsPlugin::computeSolutions(const geometry_msgs::msg::Pose& ik_pose,
     solutions.push_back(std::move(solution));
   }
   return solutions;
+}
+
+bool EAIKKinematicsPlugin::solvesOwnForwardKinematics() const
+{
+  // A fixed seed gives the same result for the same group on every start.
+  std::mt19937 rng(0);
+  std::vector<double> q(joints_.size());
+  for (int sample = 0; sample < kSelfTestSamples; ++sample)
+  {
+    for (std::size_t i = 0; i < joints_.size(); ++i)
+    {
+      // One turn at most, at the centre of the limits: a wider range only adds 2 pi variants.
+      const moveit::core::VariableBounds& bounds = joints_[i]->getVariableBounds().front();
+      double centre = 0.0;
+      double half_range = M_PI;
+      if (bounds.position_bounded_)
+      {
+        centre = 0.5 * (bounds.min_position_ + bounds.max_position_);
+        half_range = std::min(half_range, 0.5 * (bounds.max_position_ - bounds.min_position_));
+      }
+      q[i] = std::uniform_real_distribution<double>(centre - half_range, centre + half_range)(rng);
+    }
+
+    const std::vector<std::vector<double>> solutions = computeSolutions(toPose(robot_->fwdkin(q)), q, {});
+    if (solutions.empty())
+    {
+      return false;
+    }
+    for (std::size_t i = 0; i < joints_.size(); ++i)
+    {
+      if (joints_[i]->distance(&solutions.front()[i], &q[i]) > kSelfTestJointTolerance)
+      {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 std::vector<double> EAIKKinematicsPlugin::getValuesWithinLimits(const moveit::core::JointModel& joint, double value)
