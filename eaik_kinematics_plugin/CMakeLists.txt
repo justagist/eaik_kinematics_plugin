@@ -51,7 +51,7 @@ if(BUILD_TESTING)
     tf2_eigen::tf2_eigen
   )
 
-  # Needs moveit_resources and the KDL plugin at run time, so it is built with the tests.
+  # Needs moveit_resources and the compared plugins at run time, so it is built with the tests.
   add_executable(benchmark_eaik_kinematics benchmark/benchmark_eaik_kinematics.cpp)
   target_link_libraries(benchmark_eaik_kinematics
     moveit_core::moveit_kinematics_base
@@ -60,6 +60,7 @@ if(BUILD_TESTING)
     moveit_core::moveit_test_utils
     pluginlib::pluginlib
     rclcpp::rclcpp
+    srdfdom::srdfdom
     tf2_eigen::tf2_eigen
   )
   install(TARGETS benchmark_eaik_kinematics RUNTIME DESTINATION lib/${PROJECT_NAME})

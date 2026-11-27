@@ -108,23 +108,96 @@ several tip frames are rejected.
 
 ## Benchmark
 
-`benchmark_eaik_kinematics` compares this plugin with `kdl_kinematics_plugin` on the Fanuc arm. It
-uses the forward kinematics of random configurations as reachable poses, and moves each pose 10 m
-away to get unreachable poses. Each call has a random seed and a timeout of 5 ms.
+`benchmark_eaik_kinematics` compares this plugin with other kinematics plugins on the Fanuc arm from
+`moveit_resources`:
+
+| Plugin | Package |
+|---|---|
+| `eaik_kinematics_plugin/EAIKKinematicsPlugin` | `eaik_kinematics_plugin` |
+| `kdl_kinematics_plugin/KDLKinematicsPlugin` | `moveit_kinematics` |
+| `cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin` | `moveit_kinematics` |
+| `trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin` | `trac_ik_kinematics_plugin` |
+| `pick_ik/PickIkPlugin` | `pick_ik` |
+
+The benchmark skips a plugin that is not installed. `rosdep` does not install TRAC-IK or pick_ik for
+this package. To include them, install them, for example
+`apt install ros-$ROS_DISTRO-trac-ik-kinematics-plugin ros-$ROS_DISTRO-pick-ik`.
+
+Each case has 1000 queries to `searchPositionIK()` with a timeout of 5 ms, the
+`kinematics_solver_timeout` of the Fanuc MoveIt config. The target poses are the forward kinematics
+of random configurations within the joint limits. The seeds are random configurations, except in the
+case with seeds near the target. MoveIt forward kinematics measures the errors of all plugins. All
+plugins use their default parameters. Cached KDL starts with an empty cache.
 
 ```bash
 ros2 run eaik_kinematics_plugin benchmark_eaik_kinematics 1000
 ```
 
-Results on an Intel Core i7-14650HX, ROS 2 Jazzy, Release build, 1000 poses:
+Results on an Intel Core i7-14650HX, ROS 2 Jazzy, Release build:
 
-| Plugin | Reachable: success | Reachable: median / p95 (us) | Unreachable: median / p95 (us) | getPositionIKs: median solutions |
+#### Reachable poses
+
+| Plugin | Success | Median / p95 (us) | Max position error (m) | Max orientation error (rad) | Median seed distance (rad) | Solutions per pose |
+|---|---|---|---|---|---|---|
+| eaik_kinematics_plugin/EAIKKinematicsPlugin | 100.0 % | 14.4 / 17.7 | 4.9e-15 | 7.7e-14 | 7.62 | 16 |
+| kdl_kinematics_plugin/KDLKinematicsPlugin | 70.3 % | 1817.0 / 7743.3 | 9.4e-06 | 9.9e-06 | 13.10 | 1 |
+| cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin | 98.6 % | 405.1 / 20811.5 | 9.8e-06 | 1.0e-05 | 14.30 | 1 |
+| trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin | 99.8 % | 5144.0 / 5253.7 | 1.4e-05 | 1.4e-05 | 7.72 | 1 |
+| pick_ik/PickIkPlugin | 42.1 % | 5260.1 / 6631.1 | 9.9e-04 | 9.9e-04 | 12.42 | - |
+
+#### Seed near the target configuration (+/-0.05 rad per joint)
+
+| Plugin | Success | Same branch as target | Median / p95 (us) |
+|---|---|---|---|
+| eaik_kinematics_plugin/EAIKKinematicsPlugin | 100.0 % | 100.0 % | 14.6 / 18.4 |
+| kdl_kinematics_plugin/KDLKinematicsPlugin | 98.3 % | 98.3 % | 43.0 / 59.8 |
+| cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin | 99.7 % | 8.1 % | 26.3 / 117.9 |
+| trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin | 100.0 % | 100.0 % | 5133.6 / 5243.2 |
+| pick_ik/PickIkPlugin | 97.1 % | 92.2 % | 1844.7 / 5307.6 |
+
+#### Wrist singularity (joint_5 within +/-1e-03 rad, and exactly 0)
+
+| Plugin | Near: success | Near: median / p95 (us) | Exact: success | Exact: median / p95 (us) | Max position error (m) |
+|---|---|---|---|---|---|
+| eaik_kinematics_plugin/EAIKKinematicsPlugin | 100.0 % | 15.2 / 17.9 | 96.0 % | 12.9 / 15.4 | 6.5e-12 |
+| kdl_kinematics_plugin/KDLKinematicsPlugin | 51.5 % | 4175.6 / 9514.9 | 81.1 % | 1072.7 / 6722.5 | 9.9e-06 |
+| cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin | 90.3 % | 640.2 / 50068.1 | 99.5 % | 132.4 / 12033.0 | 1.0e-05 |
+| trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin | 99.6 % | 5126.1 / 5236.6 | 100.0 % | 5141.7 / 5241.6 | 1.5e-05 |
+| pick_ik/PickIkPlugin | 59.7 % | 5125.9 / 6339.4 | 58.5 % | 5119.8 / 6574.2 | 9.9e-04 |
+
+#### Unreachable poses (10 m away)
+
+| Plugin | Wrongly solved | Median / p95 (us) |
+|---|---|---|
+| eaik_kinematics_plugin/EAIKKinematicsPlugin | 0.0 % | 4.7 / 4.9 |
+| kdl_kinematics_plugin/KDLKinematicsPlugin | 0.0 % | 5126.2 / 5513.0 |
+| cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin | 0.0 % | 32190.2 / 35811.6 |
+| trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin | 0.0 % | 5142.3 / 5242.9 |
+| pick_ik/PickIkPlugin | 0.0 % | 5478.6 / 6708.2 |
+
+#### 5-joint group (base_link to link_5), reachable poses
+
+| Plugin | Success | Median / p95 (us) | Max position error (m) | Max orientation error (rad) |
 |---|---|---|---|---|
-| eaik_kinematics_plugin/EAIKKinematicsPlugin | 100.0 % | 15.9 / 23.5 | 5.3 / 7.8 | 16 (min 4, max 48) |
-| kdl_kinematics_plugin/KDLKinematicsPlugin | 70.0 % | 1772.6 / 7645.5 | 5127.7 / 5505.1 | 1 (min 1, max 1) |
+| eaik_kinematics_plugin/EAIKKinematicsPlugin | 100.0 % | 23.0 / 23.8 | 4.0e-13 | 3.8e-12 |
+| kdl_kinematics_plugin/KDLKinematicsPlugin | 37.3 % | 5152.9 / 9181.3 | 9.7e-06 | 1.0e-05 |
+| cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin | 88.3 % | 8201.6 / 46267.0 | 9.9e-06 | 9.8e-06 |
+| trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin | 99.6 % | 5142.5 / 5249.5 | 1.6e-05 | 1.4e-05 |
+| pick_ik/PickIkPlugin | 44.6 % | 5571.7 / 6072.1 | 1.0e-03 | 1.0e-03 |
 
-KDL gives one solution per pose, because it uses the default multi-solution `getPositionIK()` of
-`KinematicsBase`.
+Notes on the results:
+
+- KDL, Cached KDL and TRAC-IK give one solution per pose, because they use the default
+  multi-solution `getPositionIK()` of `KinematicsBase`. pick_ik returned no solution from the
+  multi-solution `getPositionIK()` for any pose. The cause is not known.
+- TRAC-IK uses its default solve type `Distance`. It searches for the full timeout for the solution
+  nearest to the seed, so its time is always near 5 ms. The solve type `Speed` returns the first
+  solution.
+- pick_ik uses its default thresholds of 1e-3 m and 1e-3 rad, which explains its larger errors.
+- Cached KDL returns a solution from its cache, which is often on a different branch from the seed. It
+  can also take longer than the timeout. On the 5-joint group, 15 queries failed inside Cached KDL
+  with the error "Seed state must have size 5 instead of size 6".
+- EAIK fails on 4 % of the poses at the exact wrist singularity (joint_5 = 0).
 
 ## Licence
 
