@@ -4,7 +4,11 @@
 #include "eaik_kinematics_plugin.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <random>
 #include <utility>
 
@@ -30,11 +34,25 @@ constexpr double kParallelAxesTolerance = 1e-9;
 constexpr int kSelfTestSamples = 100;
 /// Largest joint distance between a sampled configuration and the solution that must reproduce it.
 constexpr double kSelfTestJointTolerance = 1e-6;
-constexpr int kSolveFailureLogPeriodMs = 1000;
+constexpr std::chrono::nanoseconds kSolveFailureLogPeriod = std::chrono::seconds(1);
 
 rclcpp::Logger getLogger()
 {
   return rclcpp::get_logger("eaik_kinematics_plugin");
+}
+
+/// @brief Checks whether a throttled message may be logged now, and if so, records the time.
+///
+/// The throttle macros of rclcpp keep their time in an unsynchronised static, which is a data race when
+/// the const IK methods are called concurrently.
+/// @param last_logged Steady time in nanoseconds of the last message.
+/// @param period Minimum time between two messages.
+/// @return True for at most one caller in each period.
+bool isLogDue(std::atomic<std::int64_t>& last_logged, std::chrono::nanoseconds period)
+{
+  const std::int64_t now = std::chrono::steady_clock::now().time_since_epoch().count();
+  std::int64_t last = last_logged.load();
+  return now - last >= period.count() && last_logged.compare_exchange_strong(last, now);
 }
 
 /// @brief Checks whether all joint axes are parallel.
@@ -88,6 +106,8 @@ bool EAIKKinematicsPlugin::initialize(const rclcpp::Node::SharedPtr& node, const
                                       const std::vector<std::string>& tip_frames, double search_discretization)
 {
   robot_.reset();
+  joint_names_.clear();
+  link_names_.clear();
   if (tip_frames.size() != 1)
   {
     RCLCPP_ERROR(getLogger(), "Group '%s': EAIK supports exactly one tip frame, but %zu were given", group_name.c_str(),
@@ -378,8 +398,11 @@ EAIKKinematicsPlugin::computeSolutions(const geometry_msgs::msg::Pose& ik_pose,
   }
   catch (const std::exception& e)
   {
-    static rclcpp::Clock clock(RCL_STEADY_TIME);
-    RCLCPP_WARN_THROTTLE(getLogger(), clock, kSolveFailureLogPeriodMs, "EAIK failed to solve: %s", e.what());
+    static std::atomic<std::int64_t> last_logged{ std::numeric_limits<std::int64_t>::min() / 2 };
+    if (isLogDue(last_logged, kSolveFailureLogPeriod))
+    {
+      RCLCPP_WARN(getLogger(), "EAIK failed to solve: %s", e.what());
+    }
     return {};
   }
 

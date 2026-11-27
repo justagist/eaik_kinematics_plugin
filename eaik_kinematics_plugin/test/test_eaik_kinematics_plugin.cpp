@@ -417,6 +417,23 @@ TEST(EAIKInitialiseTest, RejectsReversedChainWithoutDecomposition)
   EXPECT_FALSE(createSolver(loader, *builder.build(), "arm", "base", { "tip" }).second);
 }
 
+TEST(EAIKInitialiseTest, FailedReinitialisationClearsTheGroup)
+{
+  pluginlib::ClassLoader<kinematics::KinematicsBase> loader("moveit_core", "kinematics::KinematicsBase");
+  const moveit::core::RobotModelPtr fanuc = moveit::core::loadTestingRobotModel("fanuc");
+  const auto [solver, initialised] = createSolver(loader, *fanuc, "manipulator", "base_link", { "tool0" });
+  ASSERT_TRUE(initialised);
+  ASSERT_FALSE(solver->getJointNames().empty());
+
+  const auto node = std::make_shared<rclcpp::Node>("eaik_kinematics_plugin_test");
+  EXPECT_FALSE(solver->initialize(node, *fanuc, "manipulator", "base_link", { "tool0", "link_5" }, 0.1));
+  EXPECT_TRUE(solver->getJointNames().empty());
+  EXPECT_TRUE(solver->getLinkNames().empty());
+  std::vector<double> solution;
+  MoveItErrorCodes error_code;
+  EXPECT_FALSE(solver->getPositionIK(geometry_msgs::msg::Pose(), std::vector<double>(6, 0.0), solution, error_code));
+}
+
 TEST(EAIKInitialiseTest, RejectsArmWithAxesThatAreNotExactlyParallel)
 {
   // A spherical-wrist arm with parallel axes 2 and 3. A URDF angle that is rounded to 1.5708 tilts axis 3
