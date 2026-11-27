@@ -8,7 +8,7 @@ The repository has two packages:
 
 | Package | Contents |
 |---|---|
-| `eaik_vendor` | Builds and installs the EAIK C++ library at a pinned commit. If EAIK is already installed, it builds nothing. |
+| `eaik_vendor` | Builds and installs the EAIK C++ library at a pinned commit. If CMake finds an installed EAIK package of version 1.2.2 or newer, it builds nothing. |
 | `eaik_kinematics_plugin` | The MoveIt plugin `eaik_kinematics_plugin/EAIKKinematicsPlugin`, its tests and a benchmark. |
 
 One branch supports ROS 2 Humble, Jazzy, Lyrical and Rolling.
@@ -112,8 +112,9 @@ EAIK is not in rosdep, so `eaik_vendor` builds it with `ament_cmake_vendor_packa
 - The fetch also clones the bundled Eigen submodule (about 290 MB), because `ament_vendor` always
   clones submodules. The build does not use it.
 - If CMake finds EAIK 1.2.2 or newer (`find_package(EAIK)`), `eaik_vendor` builds nothing and the
-  plugin uses that installation. That installation does not have the wrist singularity fix
-  unless upstream contains it. Set `FORCE_BUILD_VENDOR_PKG=ON` to build EAIK anyway.
+  plugin uses that installation. A pip install of EAIK is not found, because it has no CMake
+  package. An installation that does not come from the fork may not have the wrist singularity
+  fix. Set `FORCE_BUILD_VENDOR_PKG=ON` to build EAIK anyway.
 
 ## Tests
 
@@ -237,5 +238,3 @@ MoveIt. See [LICENSE](LICENSE).
 |---|---|
 | [EAIK](https://github.com/OstermD/EAIK) | BSD 3-Clause, Copyright (c) 2025 Daniel Ostermeier |
 | [ik-geo](https://github.com/OstermD/ik-geo) (EAIK submodule, fork of rpiRobotics/ik-geo) | BSD 3-Clause, Copyright (c) 2022 rpiRobotics |
-
-`eaik_vendor` installs both licence texts to `share/eaik_vendor/licenses`.

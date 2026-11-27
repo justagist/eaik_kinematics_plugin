@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 project(eaik_kinematics_plugin LANGUAGES CXX)
 
+if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+  message(STATUS "${PROJECT_NAME}: no build type was given, so Release is used")
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
