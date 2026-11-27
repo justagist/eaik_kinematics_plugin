@@ -84,20 +84,18 @@ colcon build --packages-up-to eaik_kinematics_plugin
 
 EAIK is not in rosdep, so `eaik_vendor` builds it with `ament_cmake_vendor_package`:
 
-- It fetches EAIK at commit `3d973f6` (v1.2.2) at build time, so the build needs network access.
-- It applies two patches from `eaik_vendor/patches`. Both will be proposed upstream:
-  - `0001`: the EAIK CMake files do not install a library. This patch makes `CPP/src` an
-    installable shared library with the CMake target `EAIK::EAIK`, and uses the system Eigen in
-    place of the bundled Eigen.
-  - `0002`: at the wrist singularity of a spherical-wrist arm (axes 4 and 6 aligned), EAIK sets
-    joint 4 and joint 6 to 0 independently, so the orientation about the aligned axis is wrong.
-    This patch solves joint 6 for the value of joint 4. Without it, the plugin finds no solution for
-    about 4 % of the poses at the singularity of the Fanuc arm.
+- It fetches EAIK from the `packaged-main` branch of the fork
+  [justagist/EAIK](https://github.com/justagist/EAIK) (commit `702d29b`) at build time, so the
+  build needs network access. The fork is EAIK v1.2.2 with two fixes:
+  - `CPP/src` installs a library with the CMake target `EAIK::EAIK`, and uses the system Eigen.
+  - Joint 6 is correct at the wrist singularity of spherical-wrist arms (axes 4 and 6 aligned).
+    Without this fix, the plugin finds no solution for about 4 % of the poses at the singularity
+    of the Fanuc arm.
 - The fetch also clones the bundled Eigen submodule (about 290 MB), because `ament_vendor` always
   clones submodules. The build does not use it.
 - If CMake finds EAIK 1.2.2 or newer (`find_package(EAIK)`), `eaik_vendor` builds nothing and the
-  plugin uses that installation. That installation does not have patch `0002` unless upstream
-  contains the fix. Set `FORCE_BUILD_VENDOR_PKG=ON` to build EAIK anyway.
+  plugin uses that installation. That installation does not have the wrist singularity fix
+  unless upstream contains it. Set `FORCE_BUILD_VENDOR_PKG=ON` to build EAIK anyway.
 
 ## Tests
 
