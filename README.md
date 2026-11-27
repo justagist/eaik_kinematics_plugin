@@ -85,13 +85,19 @@ colcon build --packages-up-to eaik_kinematics_plugin
 EAIK is not in rosdep, so `eaik_vendor` builds it with `ament_cmake_vendor_package`:
 
 - It fetches EAIK at commit `3d973f6` (v1.2.2) at build time, so the build needs network access.
-- The EAIK CMake files do not install a library. The patch in `eaik_vendor/patches` makes `CPP/src`
-  an installable shared library with the CMake target `EAIK::EAIK`, and uses the system Eigen in
-  place of the bundled Eigen. This change will be proposed upstream.
+- It applies two patches from `eaik_vendor/patches`. Both will be proposed upstream:
+  - `0001`: the EAIK CMake files do not install a library. This patch makes `CPP/src` an
+    installable shared library with the CMake target `EAIK::EAIK`, and uses the system Eigen in
+    place of the bundled Eigen.
+  - `0002`: at the wrist singularity of a spherical-wrist arm (axes 4 and 6 aligned), EAIK sets
+    joint 4 and joint 6 to 0 independently, so the orientation about the aligned axis is wrong.
+    This patch solves joint 6 for the value of joint 4. Without it, the plugin finds no solution for
+    about 4 % of the poses at the singularity of the Fanuc arm.
 - The fetch also clones the bundled Eigen submodule (about 290 MB), because `ament_vendor` always
   clones submodules. The build does not use it.
 - If CMake finds EAIK 1.2.2 or newer (`find_package(EAIK)`), `eaik_vendor` builds nothing and the
-  plugin uses that installation. Set `FORCE_BUILD_VENDOR_PKG=ON` to build EAIK anyway.
+  plugin uses that installation. That installation does not have patch `0002` unless upstream
+  contains the fix. Set `FORCE_BUILD_VENDOR_PKG=ON` to build EAIK anyway.
 
 ## Tests
 
@@ -102,9 +108,9 @@ colcon test-result --verbose
 ```
 
 The tests use the Fanuc and Panda arms from `moveit_resources`. They check IK against MoveIt's
-forward kinematics for random configurations, the solution order, the 2 pi variants, the solution
-callback, consistency limits, unreachable poses, a 5-joint group, and that a 7-joint group and
-several tip frames are rejected.
+forward kinematics for random configurations, configurations at the wrist singularity, the
+solution order, the 2 pi variants, the solution callback, consistency limits, unreachable poses, a
+5-joint group, and that a 7-joint group and several tip frames are rejected.
 
 ## Benchmark
 
@@ -139,51 +145,51 @@ Results on an Intel Core i7-14650HX, ROS 2 Jazzy, Release build:
 
 | Plugin | Success | Median / p95 (us) | Max position error (m) | Max orientation error (rad) | Median seed distance (rad) | Solutions per pose |
 |---|---|---|---|---|---|---|
-| eaik_kinematics_plugin/EAIKKinematicsPlugin | 100.0 % | 14.4 / 17.7 | 4.9e-15 | 7.7e-14 | 7.62 | 16 |
-| kdl_kinematics_plugin/KDLKinematicsPlugin | 70.3 % | 1817.0 / 7743.3 | 9.4e-06 | 9.9e-06 | 13.10 | 1 |
-| cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin | 98.6 % | 405.1 / 20811.5 | 9.8e-06 | 1.0e-05 | 14.30 | 1 |
-| trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin | 99.8 % | 5144.0 / 5253.7 | 1.4e-05 | 1.4e-05 | 7.72 | 1 |
-| pick_ik/PickIkPlugin | 42.1 % | 5260.1 / 6631.1 | 9.9e-04 | 9.9e-04 | 12.42 | - |
+| eaik_kinematics_plugin/EAIKKinematicsPlugin | 100.0 % | 14.8 / 17.8 | 4.9e-15 | 4.9e-14 | 7.62 | 16 |
+| kdl_kinematics_plugin/KDLKinematicsPlugin | 70.9 % | 1902.7 / 7803.7 | 9.4e-06 | 1.0e-05 | 13.08 | 1 |
+| cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin | 98.1 % | 375.6 / 23883.8 | 9.8e-06 | 1.0e-05 | 13.98 | 1 |
+| trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin | 100.0 % | 5133.7 / 5242.6 | 1.5e-05 | 1.5e-05 | 7.72 | 1 |
+| pick_ik/PickIkPlugin | 40.3 % | 5289.0 / 6606.4 | 9.8e-04 | 1.0e-03 | 12.28 | - |
 
 #### Seed near the target configuration (+/-0.05 rad per joint)
 
 | Plugin | Success | Same branch as target | Median / p95 (us) |
 |---|---|---|---|
-| eaik_kinematics_plugin/EAIKKinematicsPlugin | 100.0 % | 100.0 % | 14.6 / 18.4 |
-| kdl_kinematics_plugin/KDLKinematicsPlugin | 98.3 % | 98.3 % | 43.0 / 59.8 |
-| cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin | 99.7 % | 8.1 % | 26.3 / 117.9 |
-| trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin | 100.0 % | 100.0 % | 5133.6 / 5243.2 |
-| pick_ik/PickIkPlugin | 97.1 % | 92.2 % | 1844.7 / 5307.6 |
+| eaik_kinematics_plugin/EAIKKinematicsPlugin | 100.0 % | 100.0 % | 14.8 / 17.9 |
+| kdl_kinematics_plugin/KDLKinematicsPlugin | 98.3 % | 98.3 % | 42.9 / 59.9 |
+| cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin | 99.8 % | 6.9 % | 25.6 / 119.0 |
+| trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin | 100.0 % | 100.0 % | 5139.7 / 5238.1 |
+| pick_ik/PickIkPlugin | 96.7 % | 91.8 % | 1873.5 / 5385.8 |
 
 #### Wrist singularity (joint_5 within +/-1e-03 rad, and exactly 0)
 
 | Plugin | Near: success | Near: median / p95 (us) | Exact: success | Exact: median / p95 (us) | Max position error (m) |
 |---|---|---|---|---|---|
-| eaik_kinematics_plugin/EAIKKinematicsPlugin | 100.0 % | 15.2 / 17.9 | 96.0 % | 12.9 / 15.4 | 6.5e-12 |
-| kdl_kinematics_plugin/KDLKinematicsPlugin | 51.5 % | 4175.6 / 9514.9 | 81.1 % | 1072.7 / 6722.5 | 9.9e-06 |
-| cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin | 90.3 % | 640.2 / 50068.1 | 99.5 % | 132.4 / 12033.0 | 1.0e-05 |
-| trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin | 99.6 % | 5126.1 / 5236.6 | 100.0 % | 5141.7 / 5241.6 | 1.5e-05 |
-| pick_ik/PickIkPlugin | 59.7 % | 5125.9 / 6339.4 | 58.5 % | 5119.8 / 6574.2 | 9.9e-04 |
+| eaik_kinematics_plugin/EAIKKinematicsPlugin | 100.0 % | 15.6 / 18.4 | 100.0 % | 14.0 / 17.0 | 2.6e-09 |
+| kdl_kinematics_plugin/KDLKinematicsPlugin | 50.0 % | 5062.9 / 9556.0 | 84.4 % | 1054.9 / 6827.9 | 9.7e-06 |
+| cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin | 90.2 % | 780.9 / 52280.8 | 99.9 % | 133.2 / 17027.9 | 1.0e-05 |
+| trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin | 99.6 % | 5146.5 / 5242.5 | 100.0 % | 5142.1 / 5245.5 | 1.6e-05 |
+| pick_ik/PickIkPlugin | 61.6 % | 5146.5 / 5994.6 | 58.0 % | 5222.4 / 6182.9 | 1.0e-03 |
 
 #### Unreachable poses (10 m away)
 
 | Plugin | Wrongly solved | Median / p95 (us) |
 |---|---|---|
-| eaik_kinematics_plugin/EAIKKinematicsPlugin | 0.0 % | 4.7 / 4.9 |
-| kdl_kinematics_plugin/KDLKinematicsPlugin | 0.0 % | 5126.2 / 5513.0 |
-| cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin | 0.0 % | 32190.2 / 35811.6 |
-| trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin | 0.0 % | 5142.3 / 5242.9 |
-| pick_ik/PickIkPlugin | 0.0 % | 5478.6 / 6708.2 |
+| eaik_kinematics_plugin/EAIKKinematicsPlugin | 0.0 % | 4.9 / 5.1 |
+| kdl_kinematics_plugin/KDLKinematicsPlugin | 0.0 % | 5122.6 / 5542.6 |
+| cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin | 0.0 % | 32275.9 / 35813.4 |
+| trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin | 0.0 % | 5141.7 / 5245.1 |
+| pick_ik/PickIkPlugin | 0.0 % | 5563.3 / 6636.6 |
 
 #### 5-joint group (base_link to link_5), reachable poses
 
 | Plugin | Success | Median / p95 (us) | Max position error (m) | Max orientation error (rad) |
 |---|---|---|---|---|
-| eaik_kinematics_plugin/EAIKKinematicsPlugin | 100.0 % | 23.0 / 23.8 | 4.0e-13 | 3.8e-12 |
-| kdl_kinematics_plugin/KDLKinematicsPlugin | 37.3 % | 5152.9 / 9181.3 | 9.7e-06 | 1.0e-05 |
-| cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin | 88.3 % | 8201.6 / 46267.0 | 9.9e-06 | 9.8e-06 |
-| trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin | 99.6 % | 5142.5 / 5249.5 | 1.6e-05 | 1.4e-05 |
-| pick_ik/PickIkPlugin | 44.6 % | 5571.7 / 6072.1 | 1.0e-03 | 1.0e-03 |
+| eaik_kinematics_plugin/EAIKKinematicsPlugin | 100.0 % | 23.0 / 24.1 | 4.0e-13 | 3.8e-12 |
+| kdl_kinematics_plugin/KDLKinematicsPlugin | 36.2 % | 5166.6 / 8768.0 | 9.5e-06 | 1.0e-05 |
+| cached_ik_kinematics_plugin/CachedKDLKinematicsPlugin | 87.5 % | 9341.7 / 47882.8 | 9.9e-06 | 1.0e-05 |
+| trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin | 99.7 % | 5150.9 / 5236.6 | 1.5e-05 | 1.5e-05 |
+| pick_ik/PickIkPlugin | 43.8 % | 5640.7 / 6145.6 | 1.0e-03 | 1.0e-03 |
 
 Notes on the results:
 
@@ -197,7 +203,6 @@ Notes on the results:
 - Cached KDL returns a solution from its cache, which is often on a different branch from the seed. It
   can also take longer than the timeout. On the 5-joint group, 15 queries failed inside Cached KDL
   with the error "Seed state must have size 5 instead of size 6".
-- EAIK fails on 4 % of the poses at the exact wrist singularity (joint_5 = 0).
 
 ## Licence
 

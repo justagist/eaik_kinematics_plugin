@@ -6,14 +6,17 @@ find_package(ament_cmake_vendor_package REQUIRED)
 
 find_package(EAIK 1.2.2 QUIET)
 
-# The patch makes CPP/src an installable library with a CMake package config. It
-# is the change proposed upstream; remove it when upstream contains it.
+# The patches are changes proposed upstream; remove each one when upstream contains it.
+# 0001 makes CPP/src an installable library with a CMake package config.
+# 0002 fixes joint 6 of spherical-wrist arms at the wrist singularity.
 ament_vendor(eaik_upstream
   SATISFIED ${EAIK_FOUND}
   VCS_URL https://github.com/OstermD/EAIK.git
   VCS_VERSION 3d973f6b7e7c87ca32928ec5b7eb5e50d956a7f5
   SOURCE_SUBDIR CPP/src
-  PATCHES patches/0001-cmake-installable-library.patch
+  PATCHES
+    patches/0001-cmake-installable-library.patch
+    patches/0002-solve-q6-after-q4-at-wrist-singularity.patch
 )
 
 if(NOT EAIK_FOUND OR FORCE_BUILD_VENDOR_PKG)

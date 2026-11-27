@@ -173,6 +173,21 @@ TEST_F(EAIKFanucTest, AllSolutionsContainTheGeneratingConfiguration)
   }
 }
 
+TEST_F(EAIKFanucTest, SolvesPosesAtTheWristSingularity)
+{
+  // With joint_5 at 0, the axes of joint_4 and joint_6 are aligned, so only their sum is fixed.
+  for (int i = 0; i < kNumSamples; ++i)
+  {
+    std::vector<double> q = getRandomConfiguration();
+    q[4] = 0.0;
+    const Eigen::Isometry3d target = getTipTransform(q);
+    std::vector<double> solution;
+    MoveItErrorCodes error_code;
+    ASSERT_TRUE(solver_->getPositionIK(tf2::toMsg(target), getRandomConfiguration(), solution, error_code));
+    expectReaches(solution, target);
+  }
+}
+
 TEST_F(EAIKFanucTest, SearchReturnsTheSolutionNearestToTheSeed)
 {
   for (int i = 0; i < kNumSamples; ++i)

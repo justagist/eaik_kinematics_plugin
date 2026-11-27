@@ -1,0 +1,26 @@
+diff --git a/CPP/src/IK/6R_IK.cpp b/CPP/src/IK/6R_IK.cpp
+index 3aa5a30..15488fc 100644
+--- a/CPP/src/IK/6R_IK.cpp
++++ b/CPP/src/IK/6R_IK.cpp
+@@ -693,12 +693,17 @@ namespace IKS
+                 SP1 sp1_q4(rot_5 * this->H.col(5),
+                            r_36 * this->H.col(5),
+                            this->H.col(3));
+-                SP1 sp1_q6(rot_5.transpose() * this->H.col(3),
+-                           r_36.transpose() * this->H.col(3),
+-                           -this->H.col(5));
+                 sp1_q4.solve();
++                const double q4 = sp1_q4.get_theta();
++
++                // Solve q6 for this q4: at a wrist singularity (axes 4 and 6 aligned), q4 is arbitrary,
++                // and q6 must compensate it.
++                const Eigen::Matrix3d rot_4 = Eigen::AngleAxisd(q4, this->H.col(3).normalized()).toRotationMatrix();
++                const Eigen::Matrix3d r_6 = rot_5.transpose() * rot_4.transpose() * r_36;
++                const Eigen::Vector3d h6_normal = create_normal_vector(this->H.col(5));
++                SP1 sp1_q6(h6_normal, r_6 * h6_normal, this->H.col(5));
+                 sp1_q6.solve();
+-                solution.Q.push_back({q1, q2, q3, sp1_q4.get_theta(), q5, sp1_q6.get_theta()});
++                solution.Q.push_back({q1, q2, q3, q4, q5, sp1_q6.get_theta()});
+                 solution.is_LS_vec.push_back(position_solution_is_LS.at(i) || sp4.solution_is_ls() || sp1_q4.solution_is_ls() || sp1_q6.solution_is_ls());
+             }
+         }
