@@ -96,7 +96,9 @@ struct Stats
 double getPercentile(std::vector<double>& samples, double fraction)
 {
   if (samples.empty())
+  {
     return std::numeric_limits<double>::quiet_NaN();
+  }
   std::sort(samples.begin(), samples.end());
   return samples[static_cast<std::size_t>(fraction * static_cast<double>(samples.size() - 1))];
 }
@@ -108,7 +110,9 @@ double getPercentile(std::vector<double>& samples, double fraction)
 std::string format(const char* format, double value)
 {
   if (std::isnan(value))
+  {
     return "-";
+  }
   char text[64];
   std::snprintf(text, sizeof(text), format, value);
   return text;
@@ -157,7 +161,9 @@ Case makeCase(const moveit::core::RobotModelPtr& model, const std::string& group
   state.setToDefaultValues();
   Case result{ group, tip, std::move(targets), {}, std::move(seeds) };
   for (const std::vector<double>& q : result.targets)
+  {
     result.poses.push_back(tf2::toMsg(getTipTransform(state, group, tip, q)));
+  }
   return result;
 }
 
@@ -185,7 +191,9 @@ Stats runCase(const kinematics::KinematicsBase& solver, const moveit::core::Robo
     const bool solved = solver.searchPositionIK(test_case.poses[i], test_case.seeds[i], kTimeout, solution, error_code);
     times_us.push_back(std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - start).count());
     if (!solved)
+    {
       continue;
+    }
 
     ++successes;
     seed_distances.push_back(jmg->distance(solution.data(), test_case.seeds[i].data()));
@@ -194,7 +202,9 @@ Stats runCase(const kinematics::KinematicsBase& solver, const moveit::core::Robo
       const auto& joints = jmg->getActiveJointModels();
       bool is_same = true;
       for (std::size_t j = 0; j < joints.size(); ++j)
+      {
         is_same = is_same && joints[j]->distance(&solution[j], &test_case.targets[i][j]) <= kSameBranchTolerance;
+      }
       same_branch += is_same ? 1 : 0;
     }
 
@@ -253,7 +263,9 @@ int main(int argc, char** argv)
   const auto get_configurations = [&](const moveit::core::JointModelGroup& jmg) {
     std::vector<std::vector<double>> configurations;
     for (int i = 0; i < num_poses; ++i)
+    {
       configurations.push_back(getRandomConfiguration(jmg, rng));
+    }
     return configurations;
   };
 
@@ -264,25 +276,33 @@ int main(int argc, char** argv)
   for (std::vector<double>& seed : near_seeds)
   {
     for (double& value : seed)
+    {
       value += noise(rng);
+    }
     six.enforcePositionBounds(seed.data());
   }
   const Case near_seed = makeCase(model, "manipulator", "tool0", reachable.targets, near_seeds);
 
   std::vector<std::vector<double>> near_singular_targets = get_configurations(six);
   for (std::vector<double>& q : near_singular_targets)
+  {
     q[kWristJointIndex] = std::uniform_real_distribution<double>(-kNearSingularRange, kNearSingularRange)(rng);
+  }
   const Case near_singular = makeCase(model, "manipulator", "tool0", near_singular_targets, get_configurations(six));
 
   std::vector<std::vector<double>> singular_targets = get_configurations(six);
   for (std::vector<double>& q : singular_targets)
+  {
     q[kWristJointIndex] = 0.0;
+  }
   const Case singular = makeCase(model, "manipulator", "tool0", singular_targets, get_configurations(six));
 
   Case unreachable = reachable;
   unreachable.targets.clear();
   for (geometry_msgs::msg::Pose& pose : unreachable.poses)
+  {
     pose.position.x += kUnreachableOffset;
+  }
 
   const Case five_joints = makeCase(model, "five_joints", "link_5", get_configurations(five), get_configurations(five));
 
@@ -348,7 +368,9 @@ int main(int argc, char** argv)
 
   std::printf("Fanuc M-10iA, %d poses per case, timeout %.3f s, random seeds unless stated.\n", num_poses, kTimeout);
   for (const std::string& name : skipped)
+  {
     std::printf("Skipped: %s\n", name.c_str());
+  }
 
   std::printf("\n### Reachable poses\n\n");
   std::printf("| Plugin | Success | Median / p95 (us) | Max position error (m) | Max orientation error (rad) | "

@@ -123,7 +123,9 @@ protected:
     for (std::size_t i = 0; i < a.size(); ++i)
     {
       if (std::abs(a[i] - b[i]) > kJointTolerance)
+      {
         return false;
+      }
     }
     return true;
   }
@@ -164,7 +166,9 @@ TEST_F(EAIKFanucTest, AllSolutionsContainTheGeneratingConfiguration)
         solver_->getPositionIK({ tf2::toMsg(target) }, q, solutions, result, kinematics::KinematicsQueryOptions()));
     EXPECT_EQ(result.kinematic_error, kinematics::KinematicErrors::OK);
     for (const std::vector<double>& solution : solutions)
+    {
       expectReaches(solution, target);
+    }
     EXPECT_TRUE(isSameConfiguration(solutions.front(), q)) << "the solution nearest to the seed comes first";
   }
 }
@@ -198,7 +202,9 @@ TEST_F(EAIKFanucTest, ReturnsEveryTwoPiVariantWithinTheJointLimits)
   EXPECT_TRUE(contains(regular_q_));
   EXPECT_TRUE(contains(wrapped));
   for (const std::vector<double>& solution : solutions)
+  {
     EXPECT_TRUE(jmg_->satisfiesPositionBounds(solution.data()));
+  }
 }
 
 TEST_F(EAIKFanucTest, CallbackSelectsTheFirstAcceptedSolution)
@@ -243,7 +249,9 @@ TEST_F(EAIKFanucTest, ObeysConsistencyLimits)
 
   std::vector<double> near_seed = regular_q_;
   for (double& value : near_seed)
+  {
     value += 0.05;
+  }
   std::vector<double> solution;
   MoveItErrorCodes error_code;
   ASSERT_TRUE(solver_->searchPositionIK(pose, near_seed, 0.1, limits, solution, error_code));

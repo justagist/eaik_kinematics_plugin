@@ -76,7 +76,9 @@ bool EAIKKinematicsPlugin::initialize(const rclcpp::Node::SharedPtr& node, const
 
   const moveit::core::JointModelGroup* jmg = robot_model_->getJointModelGroup(group_name);
   if (!jmg)
+  {
     return false;
+  }
 
   std::string error;
   if (!supportsGroup(jmg, &error))
@@ -165,22 +167,32 @@ bool EAIKKinematicsPlugin::supportsGroup(const moveit::core::JointModelGroup* jm
 {
   const auto fail = [error_text_out](const std::string& error) {
     if (error_text_out)
+    {
       *error_text_out = error;
+    }
     return false;
   };
 
   if (!jmg->isChain())
+  {
     return fail("the group is not a chain");
+  }
   if (!jmg->getMimicJointModels().empty())
+  {
     return fail("the group has mimic joints");
+  }
   for (const moveit::core::JointModel* joint : jmg->getActiveJointModels())
   {
     if (joint->getType() != moveit::core::JointModel::REVOLUTE)
+    {
       return fail("joint '" + joint->getName() + "' is not revolute");
+    }
   }
   const std::size_t num_joints = jmg->getActiveJointModels().size();
   if (num_joints == 0 || num_joints > kMaxJoints)
+  {
     return fail("the group has " + std::to_string(num_joints) + " joints, but EAIK supports 1 to 6 joints only");
+  }
   return true;
 }
 
@@ -293,7 +305,9 @@ bool EAIKKinematicsPlugin::searchPositionIK(const geometry_msgs::msg::Pose& ik_p
     {
       solution_callback(ik_pose, candidate, error_code);
       if (error_code.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS)
+      {
         continue;
+      }
     }
     solution = candidate;
     error_code.val = moveit_msgs::msg::MoveItErrorCodes::SUCCESS;
@@ -324,7 +338,9 @@ EAIKKinematicsPlugin::computeSolutions(const geometry_msgs::msg::Pose& ik_pose,
   for (const std::vector<double>& q : eaik_solutions.Q)
   {
     if (!std::all_of(q.begin(), q.end(), [](double value) { return std::isfinite(value); }))
+    {
       continue;
+    }
 
     // EAIK also returns least-squares solutions when the pose is out of reach, so only solutions whose forward
     // kinematics reach the target are kept.
@@ -333,7 +349,9 @@ EAIKKinematicsPlugin::computeSolutions(const geometry_msgs::msg::Pose& ik_pose,
     const Eigen::AngleAxisd rotation_error(
         Eigen::Matrix3d(reached.topLeftCorner<3, 3>().transpose() * target.topLeftCorner<3, 3>()));
     if (position_error > params_.position_tolerance || rotation_error.angle() > params_.orientation_tolerance)
+    {
       continue;
+    }
 
     std::vector<std::vector<double>> combinations(1);
     for (std::size_t i = 0; i < joints_.size() && !combinations.empty(); ++i)
@@ -364,7 +382,9 @@ EAIKKinematicsPlugin::computeSolutions(const geometry_msgs::msg::Pose& ik_pose,
     {
       double distance = 0.0;
       for (std::size_t i = 0; i < joints_.size(); ++i)
+      {
         distance += joints_[i]->distance(&combination[i], &ik_seed_state[i]);
+      }
       sorted.emplace_back(distance, std::move(combination));
     }
   }
@@ -373,7 +393,9 @@ EAIKKinematicsPlugin::computeSolutions(const geometry_msgs::msg::Pose& ik_pose,
   std::vector<std::vector<double>> solutions;
   solutions.reserve(sorted.size());
   for (auto& [distance, solution] : sorted)
+  {
     solutions.push_back(std::move(solution));
+  }
   return solutions;
 }
 
@@ -391,7 +413,9 @@ std::vector<double> EAIKKinematicsPlugin::getValuesWithinLimits(const moveit::co
   const double lowest = bounds.min_position_ - kLimitMargin;
   double candidate = value + 2.0 * M_PI * std::ceil((lowest - value) / (2.0 * M_PI));
   for (; candidate <= bounds.max_position_ + kLimitMargin; candidate += 2.0 * M_PI)
+  {
     values.push_back(std::clamp(candidate, bounds.min_position_, bounds.max_position_));
+  }
   return values;
 }
 
