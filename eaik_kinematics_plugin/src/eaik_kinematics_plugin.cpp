@@ -146,7 +146,9 @@ bool EAIKKinematicsPlugin::initialize(const rclcpp::Node::SharedPtr& node, const
     RCLCPP_ERROR(getLogger(), "Group '%s': EAIK cannot model the group: %s", group_name.c_str(), e.what());
     return false;
   }
-  if (!robot_->has_known_decomposition())
+  // For a reversed chain, EAIK can report a known decomposition although the reversed chain has none
+  // (EAIK issue #32). The kinematic family then names an unknown class.
+  if (!robot_->has_known_decomposition() || robot_->get_kinematic_family().find("Unknown") != std::string::npos)
   {
     RCLCPP_ERROR(getLogger(),
                  "Group '%s': EAIK knows no closed-form decomposition for this kinematic structure. "

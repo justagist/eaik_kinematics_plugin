@@ -377,6 +377,35 @@ TEST(EAIKInitialiseTest, RejectsMultipleTipFrames)
   const moveit::core::RobotModelPtr fanuc = moveit::core::loadTestingRobotModel("fanuc");
   EXPECT_FALSE(createSolver(loader, *fanuc, "manipulator", "base_link", { "tool0", "link_5" }).second);
 }
+
+TEST(EAIKInitialiseTest, RejectsReversedChainWithoutDecomposition)
+{
+  // EAIK finds a known decomposition for this arm only after it reverses the chain, but the reversed
+  // chain has none. Joints 2 and 3 have the same axis.
+  const auto get_origin = [](double x, double z) {
+    geometry_msgs::msg::Pose pose;
+    pose.position.x = x;
+    pose.position.z = z;
+    pose.orientation.w = 1.0;
+    return pose;
+  };
+  const urdf::Vector3 x_axis(1.0, 0.0, 0.0);
+  const urdf::Vector3 y_axis(0.0, 1.0, 0.0);
+  const urdf::Vector3 z_axis(0.0, 0.0, 1.0);
+  moveit::core::RobotModelBuilder builder("reversed_without_decomposition", "base");
+  builder.addChain("base->link_1", "revolute", { get_origin(0.3, 0.0) }, x_axis);
+  builder.addChain("link_1->link_2", "revolute", { get_origin(0.0, 0.0) }, z_axis);
+  builder.addChain("link_2->link_3", "revolute", { get_origin(0.0, 0.0) }, z_axis);
+  builder.addChain("link_3->link_4", "revolute", { get_origin(0.0, 0.0) }, x_axis);
+  builder.addChain("link_4->link_5", "revolute", { get_origin(0.0, 0.3) }, x_axis);
+  builder.addChain("link_5->link_6", "revolute", { get_origin(0.3, 0.3) }, y_axis);
+  builder.addChain("link_6->tip", "fixed", { get_origin(0.3, 0.0) });
+  builder.addGroupChain("base", "tip", "arm");
+  ASSERT_TRUE(builder.isValid());
+
+  pluginlib::ClassLoader<kinematics::KinematicsBase> loader("moveit_core", "kinematics::KinematicsBase");
+  EXPECT_FALSE(createSolver(loader, *builder.build(), "arm", "base", { "tip" }).second);
+}
 }  // namespace
 
 int main(int argc, char** argv)
