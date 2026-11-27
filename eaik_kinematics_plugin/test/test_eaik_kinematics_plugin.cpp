@@ -469,6 +469,59 @@ TEST(EAIKInitialiseTest, RejectsSingleJointWithTipOnItsAxis)
   EXPECT_FALSE(createSolver(loader, fanuc, "one_joint", "base_link", { "link_1" }).second);
 }
 
+TEST(EAIKInitialiseTest, SolvesArmWithParallelAxesInOppositeDirections)
+{
+  // A UR5-type arm whose joint 3 axis points opposite to the parallel axes of joints 2 and 4, as in the
+  // AUBO i-series URDFs. A turn about -y is the opposite turn about +y, so the arm is fully solvable.
+  const auto get_origin = [](double x, double y, double z) {
+    geometry_msgs::msg::Pose pose = getOrigin(x, z);
+    pose.position.y = y;
+    return pose;
+  };
+  const urdf::Vector3 y_axis(0.0, 1.0, 0.0);
+  const urdf::Vector3 z_axis(0.0, 0.0, 1.0);
+  moveit::core::RobotModelBuilder builder("opposite_axes_arm", "base");
+  builder.addChain("base->link_1", "revolute", { get_origin(0.0, 0.0, 0.089159) }, z_axis);
+  builder.addChain("link_1->link_2", "revolute", { get_origin(0.0, 0.13585, 0.0) }, y_axis);
+  builder.addChain("link_2->link_3", "revolute", { get_origin(0.0, -0.1197, 0.425) }, urdf::Vector3(0.0, -1.0, 0.0));
+  builder.addChain("link_3->link_4", "revolute", { get_origin(0.0, 0.0, 0.39225) }, y_axis);
+  builder.addChain("link_4->link_5", "revolute", { get_origin(0.0, 0.093, 0.0) }, z_axis);
+  builder.addChain("link_5->link_6", "revolute", { get_origin(0.0, 0.0, 0.09465) }, y_axis);
+  builder.addChain("link_6->tip", "fixed", { get_origin(0.0, 0.0823, 0.0) });
+  builder.addGroupChain("base", "tip", "arm");
+  ASSERT_TRUE(builder.isValid());
+  const moveit::core::RobotModelPtr model = builder.build();
+  const moveit::core::JointModelGroup* jmg = model->getJointModelGroup("arm");
+
+  pluginlib::ClassLoader<kinematics::KinematicsBase> loader("moveit_core", "kinematics::KinematicsBase");
+  const auto [solver, initialised] = createSolver(loader, *model, "arm", "base", { "tip" });
+  ASSERT_TRUE(initialised);
+
+  std::mt19937 rng(42);
+  std::uniform_real_distribution<double> angle(-M_PI, M_PI);
+  moveit::core::RobotState state(model);
+  state.setToDefaultValues();
+  for (int i = 0; i < kNumSamples; ++i)
+  {
+    std::vector<double> q(6);
+    for (double& value : q)
+    {
+      value = angle(rng);
+    }
+    state.setJointGroupPositions(jmg, q);
+    state.updateLinkTransforms();
+    const Eigen::Isometry3d target = state.getGlobalLinkTransform("tip");
+
+    std::vector<double> solution;
+    MoveItErrorCodes error_code;
+    ASSERT_TRUE(solver->searchPositionIK(tf2::toMsg(target), q, 0.1, solution, error_code));
+    for (std::size_t j = 0; j < q.size(); ++j)
+    {
+      EXPECT_NEAR(solution[j], q[j], 1e-6) << "the seed is the nearest solution";
+    }
+  }
+}
+
 TEST(EAIKInitialiseTest, RejectsFourJointChainWithParallelAxes)
 {
   // EAIK overflows the stack on this chain, so the plugin must reject it before it calls EAIK.

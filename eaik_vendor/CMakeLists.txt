@@ -6,12 +6,12 @@ find_package(ament_cmake_vendor_package REQUIRED)
 
 find_package(EAIK 1.2.2 QUIET)
 
-# The fork is EAIK v1.2.2 with an installable library and a fix for joint 6 at the wrist
-# singularity of spherical-wrist arms.
+# The fork is EAIK v1.2.2 with an installable library, a fix for joint 6 at the wrist singularity
+# of spherical-wrist arms, and a fix for parallel axes that point in opposite directions.
 ament_vendor(eaik_upstream
   SATISFIED ${EAIK_FOUND}
   VCS_URL https://github.com/justagist/EAIK.git
-  VCS_VERSION 702d29bfd175997444f286c8bf2a8478ad18e86c
+  VCS_VERSION d3887e1145b86c4aa59b752e07788cc90ffd771a
   SOURCE_SUBDIR CPP/src
 )
 

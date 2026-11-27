@@ -103,18 +103,20 @@ colcon build --packages-up-to eaik_kinematics_plugin
 EAIK is not in rosdep, so `eaik_vendor` builds it with `ament_cmake_vendor_package`:
 
 - It fetches EAIK from the `packaged-main` branch of the fork
-  [justagist/EAIK](https://github.com/justagist/EAIK) (commit `702d29b`) at build time, so the
-  build needs network access. The fork is EAIK v1.2.2 with two fixes:
+  [justagist/EAIK](https://github.com/justagist/EAIK) (commit `d3887e1`) at build time, so the
+  build needs network access. The fork is EAIK v1.2.2 with three fixes:
   - `CPP/src` installs a library with the CMake target `EAIK::EAIK`, and uses the system Eigen.
   - Joint 6 is correct at the wrist singularity of spherical-wrist arms (axes 4 and 6 aligned).
     Without this fix, the plugin finds no solution for about 4 % of the poses at the singularity
     of the Fanuc arm.
+  - Parallel axes that point in opposite directions are solved. Without this fix, EAIK solves no
+    pose of an arm such as the AUBO iS10, whose axes 2, 3 and 4 are -y, +y and -y.
 - The fetch also clones the bundled Eigen submodule (about 290 MB), because `ament_vendor` always
   clones submodules. The build does not use it.
 - If CMake finds EAIK 1.2.2 or newer (`find_package(EAIK)`), `eaik_vendor` builds nothing and the
   plugin uses that installation. A pip install of EAIK is not found, because it has no CMake
-  package. An installation that does not come from the fork may not have the wrist singularity
-  fix. Set `FORCE_BUILD_VENDOR_PKG=ON` to build EAIK anyway.
+  package. An installation that does not come from the fork may not have the two solver fixes.
+  Set `FORCE_BUILD_VENDOR_PKG=ON` to build EAIK anyway.
 
 ## Tests
 
